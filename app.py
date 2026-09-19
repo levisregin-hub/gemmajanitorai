@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
+# Your secure Google AI Studio Key
 AI_STUDIO_KEY = "AQ.Ab8RN6LnBF5fs5b2EkkPrmsj1uTrtcSHEY1MNXtLrtp_r1oxCg" 
 MODEL_NAME = "gemma-4-31b-it"
 
@@ -15,7 +16,6 @@ def chat_completions():
         return "Proxy server is officially running 24/7!", 200
         
     data = request.json or {}
-    headers = {"Content-Type": "application/json", "x-goog-api-key": AI_STUDIO_KEY}
     
     formatted_messages = []
     for m in data.get("messages", []):
@@ -25,7 +25,7 @@ def chat_completions():
     if not formatted_messages:
         return jsonify({"choices": [{"message": {"role": "assistant", "content": "Proxy connected successfully!"}, "finish_reason": "stop"}]})
 
-    # Complete safety filter bypass configuration block
+    # Total bypass safety settings
     safety_settings = [
         {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
         {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -43,23 +43,27 @@ def chat_completions():
         }
     }
     
-    google_url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent"
+    # FIXED: Appending the API Key directly onto the URL query string as required by Google
+    google_url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={AI_STUDIO_KEY}"
     
     try:
-        response = requests.post(google_url, json=gemini_payload, headers=headers)
+        response = requests.post(google_url, json=gemini_payload, headers={"Content-Type": "application/json"})
         res_json = response.json()
         
         if response.status_code != 200:
             return jsonify({"error": f"Google rejected request: {response.text}"}), response.status_code
             
-        # Parse text output cleanly out of Google structure
         try:
-            reply_text = res_json['candidates'][0]['content']['parts'][0]['text']
-        except (KeyError, IndexError):
-            if 'promptFeedback' in res_json:
-                reply_text = "[Message blocked by Google's hard filters or parsing issue]"
-            else:
-                reply_text = "Connected, but returned an empty structural message format."
+            reply_text = res_json['candidates']['0']['content']['parts']['0']['text']
+        except (KeyError, IndexError, TypeError):
+            try:
+                # Secondary structural text parsing backup
+                reply_text = res_json['candidates'][0]['content']['parts'][0]['text']
+            except Exception:
+                if 'promptFeedback' in res_json:
+                    reply_text = "[Message blocked by Google's hard safety filter filters]"
+                else:
+                    reply_text = f"Connected to Google, but encountered a structural layout change. Raw response: {str(res_json)}"
         
         return jsonify({
             "choices": [{"message": {"role": "assistant", "content": reply_text}, "finish_reason": "stop"}]
@@ -69,3 +73,4 @@ def chat_completions():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000)
+    
