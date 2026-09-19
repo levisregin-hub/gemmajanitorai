@@ -40,8 +40,7 @@ def chat_completions():
         }
     }
     
-    # Self-healing check: Forces the URL to be absolutely correct no matter what
-    google_url = os.environ.get("MODEL_URL", "https://googleapis.com")
+    google_url = "https://googleapis.com"
     
     headers = {
         "Content-Type": "application/json",
@@ -55,15 +54,14 @@ def chat_completions():
         if response.status_code != 200:
             return jsonify({"error": f"Google rejected request: {response.text}"}), response.status_code
             
+        # OFFICIAL FIX: Precise array mapping logic to read Google's response blocks
         try:
-            # Standard parsing path
             reply_text = res_json['candidates'][0]['content']['parts'][0]['text']
         except (KeyError, IndexError, TypeError):
-            try:
-                # Backup parsing path
-                reply_text = res_json['candidates']['content']['parts']['text']
-            except Exception:
-                reply_text = f"Connected, but parsing failed. Response: {str(res_json)}"
+            if 'promptFeedback' in res_json:
+                reply_text = "[Message blocked by hard filters]"
+            else:
+                reply_text = f"Connected, but parsing failed. Raw response: {str(res_json)}"
         
         return jsonify({
             "choices": [{"message": {"role": "assistant", "content": reply_text}, "finish_reason": "stop"}]
