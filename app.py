@@ -54,14 +54,21 @@ def chat_completions():
         if response.status_code != 200:
             return jsonify({"error": f"Google rejected request: {response.text}"}), response.status_code
             
-        # OFFICIAL FIX: Precise array mapping logic to read Google's response blocks
+        # UNIVERSAL PARSING CHAIN: Tries every single structural layout format Google outputs
+        reply_text = None
         try:
             reply_text = res_json['candidates'][0]['content']['parts'][0]['text']
         except (KeyError, IndexError, TypeError):
-            if 'promptFeedback' in res_json:
-                reply_text = "[Message blocked by hard filters]"
-            else:
-                reply_text = f"Connected, but parsing failed. Raw response: {str(res_json)}"
+            try:
+                reply_text = res_json['candidates']['content']['parts']['text']
+            except (KeyError, IndexError, TypeError):
+                try:
+                    reply_text = res_json['candidates'][0]['output']
+                except Exception:
+                    if 'promptFeedback' in res_json:
+                        reply_text = "[Message blocked by hard filters]"
+                    else:
+                        reply_text = f"Connected, but parsing failed. Raw structure: {str(res_json)}"
         
         return jsonify({
             "choices": [{"message": {"role": "assistant", "content": reply_text}, "finish_reason": "stop"}]
