@@ -4,7 +4,7 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# Your secure AQ-format Google AI Studio key
+# Your locked-in Google API Key
 AI_STUDIO_KEY = "AQ.Ab8RN6LnBF5fs5b2EkkPrmsj1uTrtcSHEY1MNXtLrtp_r1oxCg" 
 MODEL_NAME = "gemma-4-31b-it"
 
@@ -13,7 +13,7 @@ MODEL_NAME = "gemma-4-31b-it"
 @app.route('/chat/completions', methods=['POST'])
 def chat_completions():
     if request.method == 'GET':
-        return "Proxy server is running smoothly 24/7!", 200
+        return "Proxy server is running successfully 24/7!", 200
         
     data = request.json or {}
     
@@ -42,12 +42,12 @@ def chat_completions():
         }
     }
     
-    # Modern endpoint target for Authorization Key headers
-    google_url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent"
+    google_url = f"https://googleapis.com{MODEL_NAME}:generateContent"
     
+    # CRITICAL FIX: Passing x-goog-api-key directly as an un-bearer header block for AQ keys
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {AI_STUDIO_KEY}"
+        "x-goog-api-key": AI_STUDIO_KEY
     }
     
     try:
@@ -55,7 +55,7 @@ def chat_completions():
         res_json = response.json()
         
         if response.status_code != 200:
-            return jsonify({"error": f"Google rejected key: {response.text}"}), response.status_code
+            return jsonify({"error": f"Google rejected request: {response.text}"}), response.status_code
             
         try:
             reply_text = res_json['candidates'][0]['content']['parts'][0]['text']
@@ -63,7 +63,7 @@ def chat_completions():
             try:
                 reply_text = res_json['candidates']['content']['parts']['text']
             except Exception:
-                reply_text = f"Connected to Google, but layout parsing failed: {str(res_json)}"
+                reply_text = f"Connected, but parsing failed: {str(res_json)}"
         
         return jsonify({
             "choices": [{"message": {"role": "assistant", "content": reply_text}, "finish_reason": "stop"}]
