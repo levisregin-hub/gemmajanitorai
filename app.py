@@ -5,6 +5,7 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 
 AI_STUDIO_KEY = "AQ.Ab8RN6LnBF5fs5b2EkkPrmsj1uTrtcSHEY1MNXtLrtp_r1oxCg"
+MODEL_NAME = "gemma-4-31b-it"
 
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/v1/chat/completions', methods=['POST'])
@@ -15,13 +16,27 @@ def chat_completions():
         
     data = request.json or {}
     
+    # Cleanse and strip-reformat messy structural metadata blocks from JanitorAI
+    raw_messages = data.get("messages", [])
     formatted_messages = []
-    for m in data.get("messages", []):
-        role = "user" if m["role"] == "user" else "model"
-        formatted_messages.append({"role": role, "parts": [{"text": m["content"]}]})
+    
+    for m in raw_messages:
+        content_text = m.get("content", "")
+        if not content_text:
+            continue
+            
+        # Convert custom layout strings into structural text blocks
+        role = "user" if m.get("role") in ["user", "system"] else "model"
         
+        # If consecutive roles match, merge their text contents cleanly
+        if formatted_messages and formatted_messages[-1]["role"] == role:
+            formatted_messages[-1]["parts"][0]["text"] += f"\n\n{content_text}"
+        else:
+            formatted_messages.append({"role": role, "parts": [{"text": content_text}]})
+            
+    # Self-healing fallback if array structure drops entirely
     if not formatted_messages:
-        return jsonify({"choices": [{"message": {"role": "assistant", "content": "Proxy connected successfully!"}, "finish_reason": "stop"}]})
+        formatted_messages = [{"role": "user", "parts": [{"text": "Hello"}]}]
 
     safety_settings = [
         {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -40,35 +55,28 @@ def chat_completions():
         }
     }
     
-    google_url = "https://googleapis.com"
-    
-    headers = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": AI_STUDIO_KEY
-    }
+    google_url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={AI_STUDIO_KEY}"
     
     try:
-        response = requests.post(google_url, json=gemini_payload, headers=headers)
+        response = requests.post(google_url, json=gemini_payload, headers={"Content-Type": "application/json"})
+        
+        # Immediate fallback mapping if server drops an empty value block
+        if not response.text or response.status_code != 200:
+            return jsonify({"error": f"Google rejected block: {response.text}"}), response.status_code
+            
         res_json = response.json()
         
-        if response.status_code != 200:
-            return jsonify({"error": f"Google rejected request: {response.text}"}), response.status_code
-            
-        # UNIVERSAL PARSING CHAIN: Tries every single structural layout format Google outputs
-        reply_text = None
+        # Deep structured parsing extraction
         try:
             reply_text = res_json['candidates'][0]['content']['parts'][0]['text']
         except (KeyError, IndexError, TypeError):
             try:
                 reply_text = res_json['candidates']['content']['parts']['text']
-            except (KeyError, IndexError, TypeError):
-                try:
-                    reply_text = res_json['candidates'][0]['output']
-                except Exception:
-                    if 'promptFeedback' in res_json:
-                        reply_text = "[Message blocked by hard filters]"
-                    else:
-                        reply_text = f"Connected, but parsing failed. Raw structure: {str(res_json)}"
+            except Exception:
+                if 'promptFeedback' in res_json:
+                    reply_text = "[Message dropped by Google's hard safety filtration lines]"
+                else:
+                    reply_text = "Connected successfully, but returned an unmappable content index block."
         
         return jsonify({
             "choices": [{"message": {"role": "assistant", "content": reply_text}, "finish_reason": "stop"}]
