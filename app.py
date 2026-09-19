@@ -31,6 +31,7 @@ def chat_completions():
         }
     }
     
+    # PERFECTLY SEPARATED GOOGLE API ENDPOINT
     google_url = f"https://googleapis.com{MODEL_NAME}:generateContent"
     
     try:
@@ -45,8 +46,7 @@ def chat_completions():
             "choices": [{"message": {"role": "assistant", "content": reply_text}, "finish_reason": "stop"}]
         })
     except Exception as e:
-        return jsonify({"error": f"Internal proxy error: {str(e)}"}), 500
+        return jsonify({"error": f"Internal proxy error parsing message: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    # Koyeb requires port 8000
     app.run(host='0.0.0.0', port=8000)
