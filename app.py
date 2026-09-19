@@ -4,7 +4,7 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# Your secure Google AI Studio Key
+# Your secure AQ-format Google AI Studio key
 AI_STUDIO_KEY = "AQ.Ab8RN6LnBF5fs5b2EkkPrmsj1uTrtcSHEY1MNXtLrtp_r1oxCg" 
 MODEL_NAME = "gemma-4-31b-it"
 
@@ -13,7 +13,7 @@ MODEL_NAME = "gemma-4-31b-it"
 @app.route('/chat/completions', methods=['POST'])
 def chat_completions():
     if request.method == 'GET':
-        return "Proxy server is officially running 24/7!", 200
+        return "Proxy server is running smoothly 24/7!", 200
         
     data = request.json or {}
     
@@ -25,7 +25,6 @@ def chat_completions():
     if not formatted_messages:
         return jsonify({"choices": [{"message": {"role": "assistant", "content": "Proxy connected successfully!"}, "finish_reason": "stop"}]})
 
-    # Total bypass safety settings
     safety_settings = [
         {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
         {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -43,27 +42,28 @@ def chat_completions():
         }
     }
     
-    # FIXED: Appending the API Key directly onto the URL query string as required by Google
-    google_url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={AI_STUDIO_KEY}"
+    # Modern endpoint target for Authorization Key headers
+    google_url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent"
+    
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {AI_STUDIO_KEY}"
+    }
     
     try:
-        response = requests.post(google_url, json=gemini_payload, headers={"Content-Type": "application/json"})
+        response = requests.post(google_url, json=gemini_payload, headers=headers)
         res_json = response.json()
         
         if response.status_code != 200:
-            return jsonify({"error": f"Google rejected request: {response.text}"}), response.status_code
+            return jsonify({"error": f"Google rejected key: {response.text}"}), response.status_code
             
         try:
-            reply_text = res_json['candidates']['0']['content']['parts']['0']['text']
+            reply_text = res_json['candidates'][0]['content']['parts'][0]['text']
         except (KeyError, IndexError, TypeError):
             try:
-                # Secondary structural text parsing backup
-                reply_text = res_json['candidates'][0]['content']['parts'][0]['text']
+                reply_text = res_json['candidates']['content']['parts']['text']
             except Exception:
-                if 'promptFeedback' in res_json:
-                    reply_text = "[Message blocked by Google's hard safety filter filters]"
-                else:
-                    reply_text = f"Connected to Google, but encountered a structural layout change. Raw response: {str(res_json)}"
+                reply_text = f"Connected to Google, but layout parsing failed: {str(res_json)}"
         
         return jsonify({
             "choices": [{"message": {"role": "assistant", "content": reply_text}, "finish_reason": "stop"}]
